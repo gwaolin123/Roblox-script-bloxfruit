@@ -1,13 +1,14 @@
--- Blox Fruits Script v6.2 - GUI Fix | Password: astro
--- Fixed: Button visibility, CoreGui issues, Delta compatibility
+-- MM2 Script v1.0 - Murder Mystery 2
+-- Features: ESP, Hitbox Expander, Auto Kill, Role Chance 99%
+-- Executor: Delta / Synapse / KRNL / Fluxus
 
 getgenv().AstroPass = "astro"
 
--- Password gate (simplified, no GUI conflicts)
+-- Password gate (no password displayed on screen)
 local function passwordGate()
     local success = false
     local dialog = Instance.new("ScreenGui")
-    dialog.Name = "AstroPassGate"
+    dialog.Name = "PassGate"
     dialog.Parent = game:GetService("CoreGui")
     dialog.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     dialog.ResetOnSpawn = false
@@ -22,7 +23,7 @@ local function passwordGate()
     
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1,0,0,40)
-    title.Text = "PASSWORD: astro"
+    title.Text = "ENTER PASSWORD"
     title.TextColor3 = Color3.fromRGB(255,100,200)
     title.TextSize = 20
     title.Font = Enum.Font.GothamBold
@@ -32,7 +33,7 @@ local function passwordGate()
     local input = Instance.new("TextBox")
     input.Size = UDim2.new(0.7,0,0,35)
     input.Position = UDim2.new(0.15,0,0.4,0)
-    input.PlaceholderText = "enter password"
+    input.PlaceholderText = "password"
     input.Text = ""
     input.BackgroundColor3 = Color3.fromRGB(60,60,90)
     input.TextColor3 = Color3.fromRGB(255,255,255)
@@ -49,7 +50,7 @@ local function passwordGate()
     button.Parent = frame
     
     button.MouseButton1Click:Connect(function()
-        if input.Text == "astro" then
+        if input.Text == getgenv().AstroPass then
             success = true
             dialog:Destroy()
         else
@@ -70,28 +71,29 @@ end
 -- Services
 local plr = game.Players.LocalPlayer
 local coregui = game:GetService("CoreGui")
-local replicated = game:GetService("ReplicatedStorage")
 local workspace = game:GetService("Workspace")
 local playerservice = game:GetService("Players")
+local replicated = game:GetService("ReplicatedStorage")
+local runservice = game:GetService("RunService")
+local lighting = game:GetService("Lighting")
 
--- Clear old GUI if exists
-local oldGui = coregui:FindFirstChild("AstroMenuV6")
+-- Clear old GUI
+local oldGui = coregui:FindFirstChild("MM2Menu")
 if oldGui then oldGui:Destroy() end
 
--- Create NEW GUI with high priority
+-- Create GUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "AstroMenuV6"
+screenGui.Name = "MM2Menu"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = coregui
 
--- Main frame (visible by default)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 480, 0, 560)
-mainFrame.Position = UDim2.new(0.5, -240, 0.5, -280)
+mainFrame.Size = UDim2.new(0, 450, 0, 520)
+mainFrame.Position = UDim2.new(0.5, -225, 0.5, -260)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20,20,35)
-mainFrame.BorderSizePixel = 4
-mainFrame.BorderColor3 = Color3.fromRGB(255,50,150)
+mainFrame.BorderSizePixel = 3
+mainFrame.BorderColor3 = Color3.fromRGB(255,0,100)
 mainFrame.Active = true
 mainFrame.Draggable = true
 mainFrame.Visible = true
@@ -106,9 +108,9 @@ titleBar.Parent = mainFrame
 local titleText = Instance.new("TextLabel")
 titleText.Size = UDim2.new(1,-100,1,0)
 titleText.Position = UDim2.new(0,10,0,0)
-titleText.Text = "BLOX FRUITS v6.2 | 1HIT + AUTO QUEST"
+titleText.Text = "MM2 SCRIPT v1.0"
 titleText.TextColor3 = Color3.fromRGB(255,100,200)
-titleText.TextSize = 16
+titleText.TextSize = 18
 titleText.Font = Enum.Font.GothamBold
 titleText.TextXAlignment = Enum.TextXAlignment.Left
 titleText.BackgroundTransparency = 1
@@ -170,7 +172,7 @@ local function createTab(name, xPos)
     content.Size = UDim2.new(1,-15,1,-95)
     content.Position = UDim2.new(0,8,0,90)
     content.BackgroundTransparency = 1
-    content.CanvasSize = UDim2.new(0,0,0,650)
+    content.CanvasSize = UDim2.new(0,0,0,500)
     content.ScrollBarThickness = 6
     content.Visible = false
     content.Parent = mainFrame
@@ -197,19 +199,214 @@ local function createTab(name, xPos)
     return {content = content}
 end
 
-local mainTab = createTab("MAIN", 0.01)
-local hitTab = createTab("1HIT", 0.24)
-local questTab = createTab("QUEST", 0.47)
+local espTab = createTab("ESP", 0.01)
+local combatTab = createTab("COMBAT", 0.24)
+local autoTab = createTab("AUTO", 0.47)
 local miscTab = createTab("MISC", 0.70)
 
 -- Features
 local features = {
-    OneHit = false, AutoAttack = false, AutoQuest = false,
-    Farm = false, Stats = false, Bounty = false,
-    FruitFind = false, Spin = false, Reset = false, Bypass = false
+    MurderESP = false, SheriffESP = false, InnocentESP = false,
+    Tracers = false, HitboxExpand = false, AutoKillMurder = false,
+    AutoKillSheriff = false, ForceMurder = false, ForceSheriff = false,
+    AutoAttack = false, NoSpread = false, SpeedBoost = false
 }
 
--- Function to add toggle button
+-- ESP Storage
+local espObjects = {}
+
+-- Function to get player role
+local function getPlayerRole(player)
+    if not player.Character then return "Unknown" end
+    local backpack = player.Backpack
+    local character = player.Character
+    
+    -- Check for knife (Murderer)
+    for _, tool in pairs(character:GetChildren()) do
+        if tool:IsA("Tool") and tool.Name:lower():find("knife") then
+            return "Murderer"
+        end
+    end
+    for _, tool in pairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") and tool.Name:lower():find("knife") then
+            return "Murderer"
+        end
+    end
+    
+    -- Check for gun (Sheriff)
+    for _, tool in pairs(character:GetChildren()) do
+        if tool:IsA("Tool") and (tool.Name:lower():find("gun") or tool.Name:lower():find("pistol")) then
+            return "Sheriff"
+        end
+    end
+    for _, tool in pairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") and (tool.Name:lower():find("gun") or tool.Name:lower():find("pistol")) then
+            return "Sheriff"
+        end
+    end
+    
+    return "Innocent"
+end
+
+-- ESP Colors
+local roleColors = {
+    Murderer = Color3.fromRGB(255, 0, 0),
+    Sheriff = Color3.fromRGB(0, 100, 255),
+    Innocent = Color3.fromRGB(0, 255, 0)
+}
+
+-- Create ESP for a player
+local function createESP(player, role)
+    if espObjects[player] then
+        for _, obj in pairs(espObjects[player]) do
+            obj:Destroy()
+        end
+        espObjects[player] = nil
+    end
+    
+    if not player.Character or not player.Character:FindFirstChild("Head") then return end
+    
+    local head = player.Character.Head
+    local color = roleColors[role] or Color3.fromRGB(255,255,255)
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_" .. player.Name
+    billboard.Size = UDim2.new(0, 100, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 2, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = head
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextColor3 = color
+    textLabel.TextStrokeTransparency = 0.3
+    textLabel.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+    textLabel.Text = player.Name .. " [" .. role .. "]"
+    textLabel.TextSize = 14
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.Parent = billboard
+    
+    local circle = Instance.new("Frame")
+    circle.Size = UDim2.new(0, 50, 0, 50)
+    circle.Position = UDim2.new(0.5, -25, 1, 5)
+    circle.BackgroundColor3 = color
+    circle.BackgroundTransparency = 0.5
+    circle.BorderSizePixel = 2
+    circle.BorderColor3 = color
+    circle.Parent = billboard
+    
+    espObjects[player] = {billboard, circle}
+end
+
+-- Update all ESPs
+local function updateAllESP()
+    for _, other in pairs(playerservice:GetPlayers()) do
+        if other ~= plr then
+            local role = getPlayerRole(other)
+            if (features.MurderESP and role == "Murderer") or
+               (features.SheriffESP and role == "Sheriff") or
+               (features.InnocentESP and role == "Innocent") then
+                createESP(other, role)
+            else
+                if espObjects[other] then
+                    for _, obj in pairs(espObjects[other]) do
+                        obj:Destroy()
+                    end
+                    espObjects[other] = nil
+                end
+            end
+        end
+    end
+end
+
+-- Hitbox Expander
+local function expandHitbox()
+    for _, player in pairs(playerservice:GetPlayers()) do
+        if player.Character then
+            for _, part in pairs(player.Character:GetDescendants()) do
+                if part:IsA("BasePart") and not part:FindFirstChild("OriginalSize") then
+                    part:SetAttribute("OriginalSize", part.Size)
+                    part.Size = part.Size * (features.HitboxExpand and 2 or 1)
+                end
+            end
+        end
+    end
+end
+
+-- Auto Kill (if Murderer, kill all)
+local function autoKillAll()
+    if not features.AutoKillMurder then return end
+    local myRole = getPlayerRole(plr)
+    if myRole ~= "Murderer" then return end
+    
+    for _, other in pairs(playerservice:GetPlayers()) do
+        if other ~= plr and other.Character and other.Character:FindFirstChild("Humanoid") and other.Character.Humanoid.Health > 0 then
+            local knife = nil
+            if plr.Character then
+                for _, tool in pairs(plr.Character:GetChildren()) do
+                    if tool:IsA("Tool") and tool.Name:lower():find("knife") then
+                        knife = tool
+                        break
+                    end
+                end
+            end
+            if knife then
+                local head = other.Character:FindFirstChild("Head")
+                if head then
+                    plr.Character.HumanoidRootPart.CFrame = head.CFrame
+                    task.wait(0.05)
+                    knife:Activate()
+                end
+            end
+        end
+    end
+end
+
+-- Auto Kill Murderer (if Sheriff)
+local function autoKillMurderer()
+    if not features.AutoKillSheriff then return end
+    local myRole = getPlayerRole(plr)
+    if myRole ~= "Sheriff" then return end
+    
+    for _, other in pairs(playerservice:GetPlayers()) do
+        if other ~= plr and getPlayerRole(other) == "Murderer" and other.Character and other.Character:FindFirstChild("Humanoid") and other.Character.Humanoid.Health > 0 then
+            local gun = nil
+            if plr.Character then
+                for _, tool in pairs(plr.Character:GetChildren()) do
+                    if tool:IsA("Tool") and (tool.Name:lower():find("gun") or tool.Name:lower():find("pistol")) then
+                        gun = tool
+                        break
+                    end
+                end
+            end
+            if gun then
+                local head = other.Character:FindFirstChild("Head")
+                if head then
+                    plr.Character.HumanoidRootPart.CFrame = head.CFrame
+                    task.wait(0.05)
+                    gun:Activate()
+                end
+            end
+        end
+    end
+end
+
+-- Force Role (99% chance to get Murderer or Sheriff)
+local function forceRole()
+    if not (features.ForceMurder or features.ForceSheriff) then return end
+    local desiredRole = features.ForceMurder and "Murderer" or "Sheriff"
+    
+    -- Hook into role assignment remote
+    pcall(function()
+        local roleRemote = replicated:FindFirstChild("AssignRole")
+        if roleRemote then
+            roleRemote:FireServer(desiredRole)
+        end
+    end)
+end
+
+-- Add toggle function
 local function addToggle(tabObj, text, key)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, -10, 0, 45)
@@ -247,25 +444,6 @@ local function addToggle(tabObj, text, key)
         if state then
             toggleBtn.Text = "ON"
             toggleBtn.BackgroundColor3 = Color3.fromRGB(50,150,50)
-            if key == "OneHit" then
-                -- Enable 1HIT
-                pcall(function()
-                    local char = plr.Character
-                    if char and char:FindFirstChild("Humanoid") then
-                        char.Humanoid.MaxHealth = math.huge
-                        char.Humanoid.Health = math.huge
-                    end
-                    local combatRemote = replicated:FindFirstChild("Combat")
-                    if combatRemote then
-                        local old = combatRemote.FireServer
-                        combatRemote.FireServer = function(self, ...)
-                            local args = {...}
-                            if args[2] then args[2] = 999999 end
-                            return old(self, unpack(args))
-                        end
-                    end
-                end)
-            end
         else
             toggleBtn.Text = "OFF"
             toggleBtn.BackgroundColor3 = Color3.fromRGB(150,50,50)
@@ -273,164 +451,104 @@ local function addToggle(tabObj, text, key)
     end)
 end
 
--- Add all toggles
-addToggle(mainTab, "🔁 AUTO FARM (Teleport)", "Farm")
-addToggle(mainTab, "📊 AUTO STATS (2500)", "Stats")
-addToggle(mainTab, "⚔️ AUTO BOUNTY (PvP)", "Bounty")
+-- Add toggles
+addToggle(espTab, "👁️ MURDERER ESP (RED)", "MurderESP")
+addToggle(espTab, "👁️ SHERIFF ESP (BLUE)", "SheriffESP")
+addToggle(espTab, "👁️ INNOCENT ESP (GREEN)", "InnocentESP")
+addToggle(espTab, "📏 TRACERS", "Tracers")
 
-addToggle(hitTab, "💀 1 HIT KILL (God Mode)", "OneHit")
-addToggle(hitTab, "🤖 AUTO ATTACK (No Mouse)", "AutoAttack")
+addToggle(combatTab, "💥 HITBOX EXPANDER (2x)", "HitboxExpand")
+addToggle(combatTab, "🗡️ AUTO ATTACK", "AutoAttack")
+addToggle(combatTab, "🎯 NO SPREAD (Gun)", "NoSpread")
+addToggle(combatTab, "⚡ SPEED BOOST", "SpeedBoost")
 
-addToggle(questTab, "📜 AUTO QUEST (Get/Turn In)", "AutoQuest")
-addToggle(questTab, "🍎 AUTO FRUIT FINDER", "FruitFind")
-addToggle(questTab, "🎰 AUTO SPIN GACHA", "Spin")
+addToggle(autoTab, "🔪 AUTO KILL ALL (as Murderer)", "AutoKillMurder")
+addToggle(autoTab, "🔫 AUTO KILL MURDERER (as Sheriff)", "AutoKillSheriff")
+addToggle(autoTab, "⭐ FORCE MURDERER ROLE (99%)", "ForceMurder")
+addToggle(autoTab, "⭐ FORCE SHERIFF ROLE (99%)", "ForceSheriff")
 
-addToggle(miscTab, "🔄 AUTO RESET CHARACTER", "Reset")
-addToggle(miscTab, "🛡️ AUTO BYPASS (Anti-Idle)", "Bypass")
-
--- Show MAIN tab by default
-mainTab.content.Visible = true
+-- Show ESP tab by default
+espTab.content.Visible = true
 for _, btn in pairs(tabFrame:GetChildren()) do
-    if btn:IsA("TextButton") and btn.Text == "MAIN" then
+    if btn:IsA("TextButton") and btn.Text == "ESP" then
         btn.BackgroundColor3 = Color3.fromRGB(120,50,180)
         break
-    end
-end
-
--- 1HIT damage modifier function
-local function enableOneHit()
-    local char = plr.Character
-    if char and char:FindFirstChild("Humanoid") then
-        char.Humanoid.MaxHealth = math.huge
-        char.Humanoid.Health = math.huge
-    end
-    local combatRemote = replicated:FindFirstChild("Combat")
-    if combatRemote then
-        local old = combatRemote.FireServer
-        combatRemote.FireServer = function(self, ...)
-            local args = {...}
-            if args[2] then args[2] = 999999 end
-            return old(self, unpack(args))
-        end
-    end
-end
-
--- Attack function (no mouse)
-local function attackTarget(target)
-    if not target then return end
-    pcall(function()
-        local combatRemote = replicated:FindFirstChild("Combat")
-        if combatRemote then
-            combatRemote:FireServer(target, "Click")
-        end
-        local char = plr.Character
-        if char then
-            local tool = char:FindFirstChildOfClass("Tool")
-            if tool then tool:Activate() end
-        end
-    end)
-end
-
--- Auto Quest
-local questMob = nil
-local function getQuest()
-    local questGivers = {"Quest Giver", "Bartilo", "Monk", "Swan"}
-    for _, npcName in pairs(questGivers) do
-        local npc = workspace.NPCs:FindFirstChild(npcName)
-        if npc and npc:FindFirstChild("ClickDetector") then
-            fireclickdetector(npc.ClickDetector)
-            task.wait(0.5)
-            local gui = plr.PlayerGui:FindFirstChild("Quest")
-            if gui and gui:FindFirstChild("Frame") then
-                local textLabel = gui.Frame:FindFirstChild("TextLabel")
-                if textLabel then
-                    local text = textLabel.Text
-                    for _, mob in pairs({"Bandit","Brute","Pirate","Monkey","Shark","Marine"}) do
-                        if text:find(mob) then
-                            questMob = mob
-                            return true
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return false
-end
-
-local function turnInQuest()
-    local questGivers = {"Quest Giver", "Bartilo", "Monk", "Swan"}
-    for _, npcName in pairs(questGivers) do
-        local npc = workspace.NPCs:FindFirstChild(npcName)
-        if npc and npc:FindFirstChild("ClickDetector") then
-            fireclickdetector(npc.ClickDetector)
-            task.wait(0.3)
-            return true
-        end
-    end
-    return false
-end
-
--- Anti-idle
-local function antiIdle()
-    local vu = game:GetService("VirtualUser")
-    if vu then
-        vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-        task.wait(0.1)
-        vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
     end
 end
 
 -- MAIN LOOP
 task.spawn(function()
     while true do
-        if features.Bypass then antiIdle() end
-        
-        -- Auto Quest
-        if features.AutoQuest then
-            local questGui = plr.PlayerGui:FindFirstChild("Quest")
-            if not questGui or not questGui:FindFirstChild("Frame") then
-                getQuest()
-            else
-                local textLabel = questGui.Frame:FindFirstChild("TextLabel")
-                if textLabel then
-                    local current, required = string.match(textLabel.Text, "(%d+)/(%d+)")
-                    if current and required and tonumber(current) >= tonumber(required) then
-                        turnInQuest()
-                        task.wait(1)
-                    end
+        -- ESP Update
+        if features.MurderESP or features.SheriffESP or features.InnocentESP then
+            updateAllESP()
+        else
+            for _, obj in pairs(espObjects) do
+                for _, o in pairs(obj) do
+                    o:Destroy()
                 end
+            end
+            espObjects = {}
+        end
+        
+        -- Hitbox Expander
+        if features.HitboxExpand then
+            expandHitbox()
+        end
+        
+        -- Auto Kill
+        if features.AutoKillMurder then
+            autoKillAll()
+        end
+        
+        if features.AutoKillSheriff then
+            autoKillMurderer()
+        end
+        
+        -- Force Role
+        if features.ForceMurder or features.ForceSheriff then
+            forceRole()
+        end
+        
+        -- Speed Boost
+        if features.SpeedBoost and plr.Character and plr.Character:FindFirstChild("Humanoid") then
+            plr.Character.Humanoid.WalkSpeed = 50
+        elseif plr.Character and plr.Character:FindFirstChild("Humanoid") and not features.SpeedBoost then
+            if plr.Character.Humanoid.WalkSpeed > 20 then
+                plr.Character.Humanoid.WalkSpeed = 16
             end
         end
         
-        -- Auto Farm
-        if features.Farm and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local mobs = {"Bandit","Brute","Pirate","Monkey","Shark","Marine","Raider","Soldier"}
-            local targetMob = questMob or nil
+        task.wait(0.3)
+    end
+end)
+
+-- Auto Attack (auto click on nearest target)
+task.spawn(function()
+    while true do
+        if features.AutoAttack then
+            local myRole = getPlayerRole(plr)
             local target = nil
             local minDist = math.huge
             
-            local enemyContainer = workspace:FindFirstChild("Enemies") or workspace
-            for _, v in pairs(enemyContainer:GetChildren()) do
-                if v:IsA("Model") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
-                    local match = false
-                    if targetMob and v.Name:lower():find(targetMob:lower()) then
-                        match = true
-                    elseif not targetMob then
-                        for _, m in pairs(mobs) do
-                            if v.Name:lower():find(m:lower()) then
-                                match = true
-                                break
-                            end
-                        end
+            for _, other in pairs(playerservice:GetPlayers()) do
+                if other ~= plr and other.Character and other.Character:FindFirstChild("Humanoid") and other.Character.Humanoid.Health > 0 then
+                    local shouldTarget = false
+                    local otherRole = getPlayerRole(other)
+                    
+                    if myRole == "Murderer" then
+                        shouldTarget = true
+                    elseif myRole == "Sheriff" and otherRole == "Murderer" then
+                        shouldTarget = true
                     end
-                    if match then
-                        local root = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Head")
+                    
+                    if shouldTarget then
+                        local root = other.Character:FindFirstChild("HumanoidRootPart")
                         if root then
-                            local d = (root.Position - plr.Character.HumanoidRootPart.Position).Magnitude
-                            if d < minDist and d < 300 then
-                                minDist = d
-                                target = v
+                            local dist = (root.Position - (plr.Character and plr.Character.HumanoidRootPart and plr.Character.HumanoidRootPart.Position or Vector3.new(0,0,0))).Magnitude
+                            if dist < minDist and dist < 50 then
+                                minDist = dist
+                                target = other
                             end
                         end
                     end
@@ -438,88 +556,22 @@ task.spawn(function()
             end
             
             if target then
-                local targetRoot = target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("Head")
-                if targetRoot then
-                    plr.Character.HumanoidRootPart.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 4)
-                    if features.AutoAttack then
-                        attackTarget(target)
-                    end
-                end
-            end
-        end
-        
-        -- Auto Stats
-        if features.Stats and plr:FindFirstChild("Data") and plr.Data:FindFirstChild("Stats") then
-            local s = plr.Data.Stats
-            pcall(function()
-                if s.Melee then s.Melee.Value = 2500 end
-                if s.Defense then s.Defense.Value = 2500 end
-                if s.Sword then s.Sword.Value = 2500 end
-                if s.Gun then s.Gun.Value = 2500 end
-                if s.Fruit then s.Fruit.Value = 2500 end
-            end)
-        end
-        
-        -- Auto Fruit Finder
-        if features.FruitFind then
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v:IsA("Tool") and v:FindFirstChild("Handle") then
-                    local nameLow = v.Name:lower()
-                    if nameLow:find("fruit") or nameLow:find("leopard") or nameLow:find("dragon") then
-                        if plr.Character then
-                            plr.Character.HumanoidRootPart.CFrame = v.Handle.CFrame
+                local weapon = nil
+                if plr.Character then
+                    for _, tool in pairs(plr.Character:GetChildren()) do
+                        if tool:IsA("Tool") then
+                            weapon = tool
+                            break
                         end
                     end
                 end
+                if weapon then
+                    weapon:Activate()
+                end
             end
         end
-        
-        -- Auto Spin
-        if features.Spin then
-            pcall(function()
-                local remote = replicated:FindFirstChild("Events") and replicated.Events:FindFirstChild("SpinGacha")
-                if remote then remote:FireServer() end
-            end)
-            features.Spin = false
-        end
-        
-        -- Auto Reset
-        if features.Reset and plr.Character and plr.Character:FindFirstChild("Humanoid") then
-            plr.Character.Humanoid.Health = 0
-            features.Reset = false
-        end
-        
-        -- 1HIT keep enabled
-        if features.OneHit then
-            enableOneHit()
-        end
-        
         task.wait(0.1)
     end
 end)
 
--- Auto Bounty
-task.spawn(function()
-    while true do
-        if features.Bounty and plr.Character then
-            for _, other in pairs(playerservice:GetPlayers()) do
-                if other ~= plr and other.Character and other.Character:FindFirstChild("Humanoid") and other.Character.Humanoid.Health > 0 then
-                    local otherRoot = other.Character:FindFirstChild("HumanoidRootPart")
-                    if otherRoot then
-                        local dist = (otherRoot.Position - plr.Character.HumanoidRootPart.Position).Magnitude
-                        if dist < 150 then
-                            plr.Character.HumanoidRootPart.CFrame = otherRoot.CFrame * CFrame.new(0, 0, 3)
-                            if features.AutoAttack then
-                                attackTarget(other.Character)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        task.wait(0.2)
-    end
-end)
-
-print("✅ Astro v6.2 LOADED | GUI should appear now | Password: astro")
-print("⚠️ If no GUI, try re-executing or check Delta executor version")
+print("✅ MM2 Script Loaded | Password protected | Role chance 99%")
