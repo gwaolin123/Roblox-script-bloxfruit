@@ -1,9 +1,9 @@
--- Blox Fruits Script v6.0 - Delta / Synapse / KRNL / Fluxus | Password: astro
--- Updated: Mobile & PC compatible | No VirtualInputManager issues
+-- Blox Fruits Script v6.1 - 1HIT + Auto Attack + Auto Quest | Password: astro
+-- No mouse click spam, uses Damage Modifier and Auto Quest turn-in
 
 getgenv().AstroPass = "astro"
 
--- Password gate (simplified, no focus issues)
+-- Password gate
 local function deltaPasswordCheck()
     local passDialog = Instance.new("ScreenGui")
     passDialog.Name = "AstroAuth"
@@ -47,24 +47,14 @@ local function deltaPasswordCheck()
     submitBtn.TextSize = 16
     submitBtn.Parent = mainBox
     
-    local statusText = Instance.new("TextLabel")
-    statusText.Size = UDim2.new(1,0,0,25)
-    statusText.Position = UDim2.new(0,0,0.95,0)
-    statusText.Text = ""
-    statusText.TextColor3 = Color3.fromRGB(255,0,0)
-    statusText.BackgroundTransparency = 1
-    statusText.TextSize = 12
-    statusText.Parent = mainBox
-    
     local unlocked = false
     submitBtn.MouseButton1Click:Connect(function()
         if inputBox.Text == "astro" then
             unlocked = true
             passDialog:Destroy()
         else
-            statusText.Text = "WRONG PASSWORD"
+            inputBox.Text = "WRONG"
             task.wait(1)
-            statusText.Text = ""
             inputBox.Text = ""
         end
     end)
@@ -79,27 +69,133 @@ end
 
 -- Services
 local plr = game.Players.LocalPlayer
-local mouse = plr:GetMouse()
 local runservice = game:GetService("RunService")
 local teleportservice = game:GetService("TeleportService")
 local playerservice = game:GetService("Players")
 local coregui = game:GetService("CoreGui")
 local replicated = game:GetService("ReplicatedStorage")
 local workspace = game:GetService("Workspace")
+local http = game:GetService("HttpService")
 
--- Universal input function (works on all executors)
-local function click()
-    mouse1click = mouse1click or (syn and syn.mouse1click) or (keypress and function() keypress(0x01) end)
-    if mouse1click then mouse1click() end
-end
-
-local function keypress(key)
-    if syn and syn.keypress then syn.keypress(key) 
-    elseif keypress then keypress(string.byte(key)) 
+-- 1HIT DAMAGE MODIFIER (sets all damage to kill instantly)
+local function enableOneHit()
+    local players = game:GetService("Players")
+    local localPlayer = players.LocalPlayer
+    local character = localPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChild("Humanoid")
+    if humanoid then
+        -- Set max health and damage multipliers
+        humanoid.MaxHealth = math.huge
+        humanoid.Health = math.huge
+    end
+    
+    -- Modify all weapons to do instant kill damage
+    for _, tool in pairs(character:GetChildren()) do
+        if tool:IsA("Tool") then
+            local damageScript = tool:FindFirstChild("DamageScript")
+            if damageScript then
+                damageScript:Destroy()
+            end
+        end
+    end
+    
+    -- Hook into combat remote
+    local combatRemote = replicated:FindFirstChild("Combat") or replicated:FindFirstChild("Damage")
+    if combatRemote then
+        local oldFire = combatRemote.FireServer
+        combatRemote.FireServer = function(self, ...)
+            local args = {...}
+            if args[2] then
+                args[2] = 9999999
+            end
+            return oldFire(self, unpack(args))
+        end
     end
 end
 
--- GUI Creation
+-- Auto Quest (get and turn in)
+local currentQuest = nil
+local questMob = nil
+local questCount = 0
+local questRequired = 0
+
+local function getQuest()
+    local questGivers = {"Quest Giver", "Bartilo", "Monk", "Swan", "Elite Hunter"}
+    for _, npcName in pairs(questGivers) do
+        local npc = workspace.NPCs:FindFirstChild(npcName)
+        if npc and npc:FindFirstChild("ClickDetector") then
+            fireclickdetector(npc.ClickDetector)
+            task.wait(0.5)
+            -- Check if quest was taken
+            local gui = plr.PlayerGui:FindFirstChild("Quest")
+            if gui and gui:FindFirstChild("Frame") then
+                local questText = gui.Frame:FindFirstChild("TextLabel")
+                if questText then
+                    local text = questText.Text
+                    for _, mob in pairs({"Bandit", "Brute", "Pirate", "Monkey", "Shark", "Marine", "Raider", "Soldier"}) do
+                        if text:find(mob) then
+                            questMob = mob
+                            local countMatch = string.match(text, "(%d+)/%d+")
+                            if countMatch then
+                                questCount = tonumber(countMatch) or 0
+                            end
+                            local reqMatch = string.match(text, "%d+/(%d+)")
+                            if reqMatch then
+                                questRequired = tonumber(reqMatch) or 5
+                            end
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function turnInQuest()
+    local questGivers = {"Quest Giver", "Bartilo", "Monk", "Swan", "Elite Hunter"}
+    for _, npcName in pairs(questGivers) do
+        local npc = workspace.NPCs:FindFirstChild(npcName)
+        if npc and npc:FindFirstChild("ClickDetector") then
+            fireclickdetector(npc.ClickDetector)
+            task.wait(0.3)
+            return true
+        end
+    end
+    return false
+end
+
+-- Auto Attack (no mouse, uses FireServer)
+local function attackTarget(target)
+    if not target or not target:FindFirstChild("Humanoid") or target.Humanoid.Health <= 0 then
+        return false
+    end
+    
+    local combatRemote = replicated:FindFirstChild("Combat") or replicated:FindFirstChild("Attack")
+    if combatRemote then
+        pcall(function()
+            combatRemote:FireServer(target, "Click")
+        end)
+    end
+    
+    -- Alternative: Use tool activation
+    local character = plr.Character
+    if character then
+        local tool = character:FindFirstChildOfClass("Tool")
+        if tool then
+            pcall(function()
+                tool:Activate()
+            end)
+        end
+    end
+    
+    return true
+end
+
+-- GUI
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AstroMenuV6"
 screenGui.ResetOnSpawn = false
@@ -115,7 +211,6 @@ mainFrame.Active = true
 mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 
--- Title bar
 local titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1,0,0,35)
 titleBar.BackgroundColor3 = Color3.fromRGB(35,35,50)
@@ -124,9 +219,9 @@ titleBar.Parent = mainFrame
 local titleText = Instance.new("TextLabel")
 titleText.Size = UDim2.new(1,-80,1,0)
 titleText.Position = UDim2.new(0,10,0,0)
-titleText.Text = "BLOX FRUITS v6.0 | astro"
+titleText.Text = "BLOX FRUITS v6.1 | 1HIT + AUTO QUEST"
 titleText.TextColor3 = Color3.fromRGB(255,100,150)
-titleText.TextSize = 16
+titleText.TextSize = 14
 titleText.Font = Enum.Font.GothamBold
 titleText.TextXAlignment = Enum.TextXAlignment.Left
 titleText.BackgroundTransparency = 1
@@ -161,15 +256,12 @@ openBtn.MouseButton1Click:Connect(function()
     openBtn.Visible = false
 end)
 
--- Tab buttons
+-- Tab system
 local tabFrame = Instance.new("Frame")
 tabFrame.Size = UDim2.new(1,0,0,40)
 tabFrame.Position = UDim2.new(0,0,0,35)
 tabFrame.BackgroundColor3 = Color3.fromRGB(25,25,40)
 tabFrame.Parent = mainFrame
-
-local tabs = {}
-local currentTab = nil
 
 local function createTab(name, position)
     local btn = Instance.new("TextButton")
@@ -185,7 +277,7 @@ local function createTab(name, position)
     content.Size = UDim2.new(1,-10,1,-85)
     content.Position = UDim2.new(0,5,0,80)
     content.BackgroundTransparency = 1
-    content.CanvasSize = UDim2.new(0,0,0,600)
+    content.CanvasSize = UDim2.new(0,0,0,400)
     content.ScrollBarThickness = 5
     content.Visible = false
     content.Parent = mainFrame
@@ -213,18 +305,15 @@ local function createTab(name, position)
 end
 
 local mainTab = createTab("MAIN", 0.02)
-local combatTab = createTab("COMBAT", 0.22)
-local worldTab = createTab("WORLD", 0.42)
+local combatTab = createTab("1HIT", 0.22)
+local worldTab = createTab("QUEST", 0.42)
 local miscTab = createTab("MISC", 0.62)
 
--- Feature states
+-- Features
 local features = {
-    Farm = false, Raid = false, SeaEvent = false, Boss = false, FruitFind = false,
-    Elite = false, Chest = false, Observation = false, FightingStyle = false, Stats = false,
-    Ship = false, Factory = false, Castle = false, Islands = false, Teleport = false,
-    Bounty = false, Skills = false, Gun = false, Sword = false, Fruit = false,
-    RaceV2 = false, Title = false, Quest = false, Store = false, Drop = false,
-    Sell = false, Spin = false, Reset = false, ServerHop = false, Bypass = false
+    OneHit = false, AutoAttack = false, AutoQuest = false,
+    Farm = false, Stats = false, Bounty = false,
+    FruitFind = false, Spin = false, Reset = false, Bypass = false
 }
 
 local function addToggle(tab, text, key)
@@ -261,6 +350,7 @@ local function addToggle(tab, text, key)
         if state then
             toggle.Text = "ON"
             toggle.BackgroundColor3 = Color3.fromRGB(40,100,40)
+            if key == "OneHit" then enableOneHit() end
         else
             toggle.Text = "OFF"
             toggle.BackgroundColor3 = Color3.fromRGB(100,40,40)
@@ -268,42 +358,21 @@ local function addToggle(tab, text, key)
     end)
 end
 
--- Add all toggles
-addToggle(mainTab, "Auto Farm", "Farm")
-addToggle(mainTab, "Auto Raid", "Raid")
-addToggle(mainTab, "Auto Boss", "Boss")
-addToggle(mainTab, "Auto Elite Hunter", "Elite")
-addToggle(mainTab, "Auto Chest Farm", "Chest")
+addToggle(mainTab, "Auto Farm (Teleport)", "Farm")
 addToggle(mainTab, "Auto Stats", "Stats")
+addToggle(mainTab, "Auto Bounty (PvP)", "Bounty")
 
-addToggle(combatTab, "Auto Bounty", "Bounty")
-addToggle(combatTab, "Auto Skills", "Skills")
-addToggle(combatTab, "Auto Gun", "Gun")
-addToggle(combatTab, "Auto Sword", "Sword")
-addToggle(combatTab, "Auto Fruit", "Fruit")
+addToggle(combatTab, "1 HIT KILL (God Mode)", "OneHit")
+addToggle(combatTab, "Auto Attack (No Mouse)", "AutoAttack")
 
-addToggle(worldTab, "Auto Sea Event", "SeaEvent")
-addToggle(worldTab, "Auto Ship", "Ship")
-addToggle(worldTab, "Auto Factory", "Factory")
-addToggle(worldTab, "Auto Castle Raid", "Castle")
-addToggle(worldTab, "Auto Islands", "Islands")
-addToggle(worldTab, "Auto Teleport", "Teleport")
+addToggle(worldTab, "Auto Quest (Get/Turn In)", "AutoQuest")
+addToggle(worldTab, "Auto Fruit Finder", "FruitFind")
+addToggle(worldTab, "Auto Spin Gacha", "Spin")
 
-addToggle(miscTab, "Auto Fruit Finder", "FruitFind")
-addToggle(miscTab, "Auto Observation", "Observation")
-addToggle(miscTab, "Auto Fighting Style", "FightingStyle")
-addToggle(miscTab, "Auto Race V2", "RaceV2")
-addToggle(miscTab, "Auto Title", "Title")
-addToggle(miscTab, "Auto Quest", "Quest")
-addToggle(miscTab, "Auto Store", "Store")
-addToggle(miscTab, "Auto Drop", "Drop")
-addToggle(miscTab, "Auto Sell", "Sell")
-addToggle(miscTab, "Auto Spin", "Spin")
-addToggle(miscTab, "Auto Reset", "Reset")
-addToggle(miscTab, "Auto Server Hop", "ServerHop")
-addToggle(miscTab, "Auto Bypass", "Bypass")
+addToggle(miscTab, "Auto Reset Character", "Reset")
+addToggle(miscTab, "Auto Bypass/Idle", "Bypass")
 
--- Show first tab by default
+-- Show first tab
 for _, c in pairs(mainFrame:GetChildren()) do
     if c:IsA("ScrollingFrame") and c == mainTab.content then
         c.Visible = true
@@ -317,7 +386,7 @@ for _, b in pairs(tabFrame:GetChildren()) do
     end
 end
 
--- Bypass function (no VirtualInputManager needed)
+-- Anti-idle
 local function antiIdle()
     local vu = game:GetService("VirtualUser")
     if vu then
@@ -327,37 +396,60 @@ local function antiIdle()
     end
 end
 
--- Core loops
+-- MAIN LOOP
 task.spawn(function()
     while true do
-        if features.Bypass then
-            antiIdle()
-            for _, v in pairs(coregui:GetChildren()) do
-                if v.Name:lower():find("anticheat") or v.Name:lower():find("antihack") then
-                    v:Destroy()
+        if features.Bypass then antiIdle() end
+        
+        -- AUTO QUEST
+        if features.AutoQuest then
+            local questGui = plr.PlayerGui:FindFirstChild("Quest")
+            if not questGui or not questGui:FindFirstChild("Frame") then
+                getQuest()
+            else
+                -- Check if quest complete
+                local questText = questGui.Frame:FindFirstChild("TextLabel")
+                if questText then
+                    local text = questText.Text
+                    local current, required = string.match(text, "(%d+)/(%d+)")
+                    if current and required and tonumber(current) >= tonumber(required) then
+                        turnInQuest()
+                        task.wait(1)
+                    end
                 end
             end
         end
         
-        -- AUTO FARM (FIXED FOR SEA 1)
+        -- AUTO FARM (with quest mob targeting)
         if features.Farm and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local mobs = {"Bandit", "Brute", "Pirate", "Monkey", "Shark", "Marine", "Raider", "Soldier", "NPC"}
+            local mobs = {"Bandit", "Brute", "Pirate", "Monkey", "Shark", "Marine", "Raider", "Soldier"}
+            -- If quest active, target only quest mob
+            local targetMob = questMob or nil
             local target = nil
             local minDist = math.huge
             
-            -- Check Workspace.Enemies first (Sea 1 bandits location)
             local enemyContainer = workspace:FindFirstChild("Enemies") or workspace
             for _, v in pairs(enemyContainer:GetChildren()) do
                 if v:IsA("Model") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
-                    for _, m in pairs(mobs) do
-                        if v.Name == m or (v.Name and v.Name:lower():find(m:lower())) then
-                            local root = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Head")
-                            if root then
-                                local d = (root.Position - plr.Character.HumanoidRootPart.Position).Magnitude
-                                if d < minDist and d < 250 then
-                                    minDist = d
-                                    target = v
-                                end
+                    local shouldTarget = false
+                    if targetMob and v.Name:lower():find(targetMob:lower()) then
+                        shouldTarget = true
+                    elseif not targetMob then
+                        for _, m in pairs(mobs) do
+                            if v.Name == m or (v.Name and v.Name:lower():find(m:lower())) then
+                                shouldTarget = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    if shouldTarget then
+                        local root = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Head")
+                        if root then
+                            local d = (root.Position - plr.Character.HumanoidRootPart.Position).Magnitude
+                            if d < minDist and d < 300 then
+                                minDist = d
+                                target = v
                             end
                         end
                     end
@@ -367,10 +459,44 @@ task.spawn(function()
             if target then
                 local targetRoot = target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("Head")
                 if targetRoot then
-                    plr.Character.HumanoidRootPart.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 3)
+                    plr.Character.HumanoidRootPart.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 4)
                     task.wait(0.05)
-                    click()
+                    if features.AutoAttack then
+                        attackTarget(target)
+                    end
+                    -- Update quest count if needed
+                    if features.AutoQuest and questMob and target.Name:lower():find(questMob:lower()) then
+                        task.wait(0.1)
+                    end
                 end
+            end
+        end
+        
+        -- AUTO ATTACK (independent, hits nearest)
+        if features.AutoAttack and not features.Farm then
+            local mobs = {"Bandit", "Brute", "Pirate", "Monkey", "Shark", "Marine", "Raider", "Soldier"}
+            local nearest = nil
+            local minDist = math.huge
+            local enemyContainer = workspace:FindFirstChild("Enemies") or workspace
+            for _, v in pairs(enemyContainer:GetChildren()) do
+                if v:IsA("Model") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+                    for _, m in pairs(mobs) do
+                        if v.Name == m or (v.Name and v.Name:lower():find(m:lower())) then
+                            local root = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Head")
+                            if root and plr.Character then
+                                local d = (root.Position - plr.Character.HumanoidRootPart.Position).Magnitude
+                                if d < minDist and d < 50 then
+                                    minDist = d
+                                    nearest = v
+                                end
+                            end
+                            break
+                        end
+                    end
+                end
+            end
+            if nearest then
+                attackTarget(nearest)
             end
         end
         
@@ -406,6 +532,7 @@ task.spawn(function()
                 local remote = replicated:FindFirstChild("Events") and replicated.Events:FindFirstChild("SpinGacha")
                 if remote then remote:FireServer() end
             end)
+            features.Spin = false
         end
         
         -- AUTO RESET
@@ -418,57 +545,10 @@ task.spawn(function()
     end
 end)
 
--- AUTO BOUNTY (PvP)
+-- AUTO BOUNTY
 task.spawn(function()
     while true do
         if features.Bounty and plr.Character then
             for _, other in pairs(playerservice:GetPlayers()) do
                 if other ~= plr and other.Character and other.Character:FindFirstChild("Humanoid") and other.Character.Humanoid.Health > 0 then
-                    local otherRoot = other.Character:FindFirstChild("HumanoidRootPart")
-                    if otherRoot then
-                        local dist = (otherRoot.Position - plr.Character.HumanoidRootPart.Position).Magnitude
-                        if dist < 150 then
-                            plr.Character.HumanoidRootPart.CFrame = otherRoot.CFrame * CFrame.new(0, 0, 2)
-                            task.wait(0.05)
-                            click()
-                        end
-                    end
-                end
-            end
-        end
-        task.wait(0.2)
-    end
-end)
-
--- AUTO SEA EVENT
-task.spawn(function()
-    while true do
-        if features.SeaEvent then
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v.Name:lower():find("sea") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
-                    local root = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Head")
-                    if root and plr.Character then
-                        plr.Character.HumanoidRootPart.CFrame = root.CFrame
-                    end
-                end
-            end
-        end
-        task.wait(0.5)
-    end
-end)
-
--- AUTO SKILLS (key presses)
-task.spawn(function()
-    local skillKeys = {"Q", "E", "R", "T", "Y", "F", "G", "Z", "X", "C"}
-    while true do
-        if features.Skills then
-            for _, k in pairs(skillKeys) do
-                keypress(k)
-                task.wait(0.1)
-            end
-        end
-        task.wait(1)
-    end
-end)
-
-print("Astro v6.0 loaded | Password: astro | Fully compatible")
+                    local otherRoot = other.Character:FindFirstChil
